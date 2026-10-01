@@ -1,0 +1,27 @@
+services:
+
+  proxy:
+    build:
+      context: .
+      dockerfile: ../shared/envoy/Dockerfile
+      target: envoy-admin
+      args:
+        ENVOY_ADMIN_PORT: 9901
+    # The Vertex AI path is rewritten with a regex, which cannot read the environment, so the Google
+    # Cloud project and location in it are filled in as the proxy starts. The access log is flushed
+    # every second, rather than every 10, so that each request shows up in it as it is served.
+    command:
+    - /bin/sh
+    - -c
+    - >-
+      sed "s|/projects/VERTEX_PROJECT/locations/VERTEX_LOCATION/|/projects/${VERTEX_PROJECT:-}/locations/${VERTEX_LOCATION:-global}/|"
+      /etc/envoy.yaml > /tmp/envoy.yaml
+      && exec /usr/local/bin/envoy -c /tmp/envoy.yaml --file-flush-interval-msec 1000
+    # Envoy's secrets need each variable to exist, if only as an empty key.
+    environment:
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - VERTEX_API_KEY=${VERTEX_API_KEY:-}
+    ports:
+    - "${PORT_PROXY:-10000}:10000"
+    - "${PORT_ADMIN:-9901}:9901"
